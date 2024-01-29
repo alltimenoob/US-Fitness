@@ -20,20 +20,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.zeroturnaround.zip.ZipUtil
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.util.zip.ZipEntry
 import java.util.zip.ZipException
-import java.util.zip.ZipFile
-import java.util.zip.ZipOutputStream
 import javax.inject.Inject
-import kotlin.math.log
 
 enum class Sort(val text: String) {
     ByName("By Name"),
@@ -80,8 +72,6 @@ class MainScreenViewModel @Inject constructor(
         }
     }
 
-    /**This function is extension for sorting two way (Ascending, Decending)
-     * @param sortAcccordingToState **/
     private fun <T, R : Comparable<R>> Iterable<T>.sortAccordingToState(selector: (T) -> R?): List<T> {
         return when (sortChoice.state) {
             SortState.Ascending -> this.sortedBy(selector)
@@ -155,7 +145,6 @@ class MainScreenViewModel @Inject constructor(
         val recordsFile = File(mainDir, "records.csv")
         val zipFile = File(path, "database_${System.currentTimeMillis()}.zip")
 
-
         viewModelScope.launch {
             val customers = async { customerRepository.getAll() }.await()
             val records = async { recordRepository.getAll() }.await()
@@ -189,7 +178,7 @@ class MainScreenViewModel @Inject constructor(
     fun restoreToDatabase(path: File, zipFile: File) {
         val outputDir = File(path, "USFITNESS_UNPACK")
         try{
-            ZipUtil.unpack(zipFile, File(path, "USFITNESS_UNPACK"));
+            ZipUtil.unpack(zipFile, File(path, "USFITNESS_UNPACK"))
 
             val customersCSV = File(outputDir.absolutePath, "customers.csv")
             val recordsCSV = File(outputDir.absolutePath, "records.csv")
