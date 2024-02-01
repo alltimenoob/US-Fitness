@@ -7,13 +7,13 @@ import javax.inject.Inject
 class RecordRepository @Inject constructor(private val recordsDAO: RecordsDAO) {
 
     @WorkerThread
-    suspend fun addRecord(record : Record) {
-        recordsDAO.insertAll(record)
+    suspend fun addRecord(record : Record) : Long {
+        return recordsDAO.insert(record)
     }
 
     @WorkerThread
     suspend fun addAllRecords(vararg records : Record){
-        recordsDAO.insertAll(*records)
+        recordsDAO.insertALl(*records)
     }
 
     @WorkerThread
@@ -22,7 +22,7 @@ class RecordRepository @Inject constructor(private val recordsDAO: RecordsDAO) {
     }
 
     @WorkerThread
-    fun getRecordDates(cid : Int) : LiveData<List<Record>> {
-        return recordsDAO.loadAllByIds(intArrayOf(cid))
+    suspend fun getLastRecordEndDate(cid : Int) : Record {
+        return recordsDAO.getLastRecordEndDate(cid)
     }
 }

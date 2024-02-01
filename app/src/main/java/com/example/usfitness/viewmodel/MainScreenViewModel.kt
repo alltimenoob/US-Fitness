@@ -10,6 +10,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.usfitness.database.customer.Customer
 import com.example.usfitness.database.customer.CustomerRepository
 import com.example.usfitness.database.customer.CustomizedCustomer
+import com.example.usfitness.database.payment.Payment
+import com.example.usfitness.database.payment.PaymentRepository
 import com.example.usfitness.database.record.Record
 import com.example.usfitness.database.record.RecordRepository
 import com.example.usfitness.ui.theme.getColor
@@ -44,6 +46,7 @@ data class SortMenu(val current: Sort, var state: SortState)
 class MainScreenViewModel @Inject constructor(
     private val customerRepository: CustomerRepository,
     private val recordRepository: RecordRepository,
+    private val paymentRepository: PaymentRepository
 ) :
     ViewModel() {
 
@@ -63,7 +66,7 @@ class MainScreenViewModel @Inject constructor(
 
     private var sortChoice: SortMenu = SortMenu(Sort.ByExpiryDate, SortState.Ascending)
 
-    val returnFile : MutableLiveData<File> = MutableLiveData()
+    private val returnFile : MutableLiveData<File> = MutableLiveData()
 
     init {
         filteredCustomers.addSource(customers) {
@@ -72,12 +75,28 @@ class MainScreenViewModel @Inject constructor(
         }
     }
 
+    fun searchCustomer(searchQuery: String) {
+        this.searchQuery = searchQuery
+        performEverything()
+    }
+
+    fun filterCustomer(filterMenuList: List<FilterMenu>) {
+        this.filterMenuList = filterMenuList
+        performEverything()
+    }
+
+    fun sortCustomer(sort: SortMenu) {
+        this.sortChoice = sort
+        performEverything()
+    }
+
     private fun <T, R : Comparable<R>> Iterable<T>.sortAccordingToState(selector: (T) -> R?): List<T> {
         return when (sortChoice.state) {
             SortState.Ascending -> this.sortedBy(selector)
             else -> this.sortedByDescending(selector)
         }
     }
+
 
     private fun performEverything() {
         val customerList = (customers.value ?: emptyList())
@@ -106,20 +125,8 @@ class MainScreenViewModel @Inject constructor(
         return filteredCustomers
     }
 
-    fun searchCustomer(searchQuery: String) {
-        this.searchQuery = searchQuery
-        performEverything()
-    }
+    fun getDatabaseFile() : LiveData<File> = returnFile
 
-    fun filterCustomer(filterMenuList: List<FilterMenu>) {
-        this.filterMenuList = filterMenuList
-        performEverything()
-    }
-
-    fun sortCustomer(sort: SortMenu) {
-        this.sortChoice = sort
-        performEverything()
-    }
 
     fun getExpiryTintForCustomer(endDate: LocalDate): Color {
         return if (endDate.isBefore(
@@ -132,8 +139,8 @@ class MainScreenViewModel @Inject constructor(
         else getColor("Green")
     }
 
-    fun getCustomerPaymentDates(cid: Int): LiveData<List<Record>> {
-        return recordRepository.getRecordDates(cid)
+    fun getPaymentsForCustomer(cid: Int): LiveData<List<Payment>> {
+        return paymentRepository.getPaymentsForCustomer(cid)
     }
 
     fun saveDatabaseToFile(path: File) {
@@ -143,11 +150,13 @@ class MainScreenViewModel @Inject constructor(
 
         val customerFile = File(mainDir, "customers.csv")
         val recordsFile = File(mainDir, "records.csv")
-        val zipFile = File(path, "database_${System.currentTimeMillis()}.zip")
+        val paymentsFile = File(mainDir, "payments.csv")
+        val zipFile = File(path, "database_${System.currentTimeMillis()}.usdb")
 
         viewModelScope.launch {
             val customers = async { customerRepository.getAll() }.await()
             val records = async { recordRepository.getAll() }.await()
+            val payments = async { paymentRepository.getAll() }.await()
 
             withContext(Dispatchers.IO) {
                 FileOutputStream(customerFile).use { stream ->
@@ -160,9 +169,17 @@ class MainScreenViewModel @Inject constructor(
 
                 FileOutputStream(recordsFile).use { stream ->
                     records.map {
-                        "${it.rid},${it.cid},${it.startDate},${it.endDate},${it.total},${it.paid}\n".toByteArray()
+                        "${it.rid},${it.cid},${it.startDate},${it.endDate},${it.total}\n".toByteArray()
                     }.forEach { record ->
                         stream.write(record)
+                    }
+                }
+
+                FileOutputStream(paymentsFile).use {stream ->
+                    payments.map {
+                        "${it.pid},${it.rid},${it.amount},${it.date}\n".toByteArray()
+                    }.forEach{ payment->
+                        stream.write(payment)
                     }
                 }
             }
@@ -173,7 +190,7 @@ class MainScreenViewModel @Inject constructor(
         }
     }
 
-    fun getDatabaseFile() : LiveData<File> = returnFile
+    private operator fun <E> List<E>.component6() = get(5)
 
     fun restoreToDatabase(path: File, zipFile: File) {
         val outputDir = File(path, "USFITNESS_UNPACK")
@@ -182,6 +199,7 @@ class MainScreenViewModel @Inject constructor(
 
             val customersCSV = File(outputDir.absolutePath, "customers.csv")
             val recordsCSV = File(outputDir.absolutePath, "records.csv")
+            val paymentsCSV = File(outputDir.absolutePath, "payments.csv")
 
             if (!(customersCSV.exists() && recordsCSV.exists())) return
 
@@ -201,7 +219,7 @@ class MainScreenViewModel @Inject constructor(
 
             val recordReader = recordInputStream.bufferedReader()
             val records: List<Record> = recordReader.lineSequence().map {
-                val (rid, cid, startDate, endDate, total, paid ) = it.split(
+                val (rid, cid, startDate, endDate, total ) = it.split(
                     ',',
                     ignoreCase = false,
                     limit = 6
@@ -213,13 +231,25 @@ class MainScreenViewModel @Inject constructor(
                     LocalDate.parse(startDate),
                     LocalDate.parse(endDate),
                     Integer.parseInt(total),
-                    Integer.parseInt(paid)
                 )
+            }.toList()
+
+            val paymentInputStream = FileInputStream(paymentsCSV)
+
+            val paymentReader = paymentInputStream.bufferedReader()
+            val payments: List<Payment> = paymentReader.lineSequence().map {
+                val (pid, rid, amount,date) = it.split(
+                    ',',
+                    ignoreCase = false,
+                    limit = 6
+                )
+                Payment(Integer.valueOf(pid),Integer.valueOf(rid),Integer.valueOf(amount),LocalDate.parse(date))
             }.toList()
 
             viewModelScope.launch {
                 async { customerRepository.addAllCustomer(*customers.toTypedArray()) }.await()
                 async { recordRepository.addAllRecords(*records.toTypedArray()) }.await()
+                async { paymentRepository.addAllPayment(*payments.toTypedArray()) }.await()
             }
 
             outputDir.deleteRecursively()
@@ -228,12 +258,9 @@ class MainScreenViewModel @Inject constructor(
             Log.e(  "CustomizedError",exception.message ?: "")
             outputDir.delete()
         }
-
-
     }
 }
 
-private operator fun <E> List<E>.component6() = get(5)
 
 
 

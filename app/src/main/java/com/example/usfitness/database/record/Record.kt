@@ -3,7 +3,6 @@ package com.example.usfitness.database.record
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
-import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.usfitness.database.customer.Customer
 import java.time.LocalDate
@@ -18,9 +17,8 @@ import java.time.LocalDate
 )
 data class Record(
     @PrimaryKey(autoGenerate = true) @ColumnInfo(name = "rid") val rid: Int?,
-    @ColumnInfo(name = "cid", index = true) val cid: Int,
+    @ColumnInfo(name = "cid") val cid: Int,
     @ColumnInfo(name = "start_date") val startDate : LocalDate,
     @ColumnInfo(name = "end_date") val endDate : LocalDate,
     @ColumnInfo(name = "total") val total : Int,
-    @ColumnInfo(name = "paid") val paid : Int,
 )

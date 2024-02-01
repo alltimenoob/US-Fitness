@@ -1,19 +1,11 @@
 package com.example.usfitness.screens
 
 import android.annotation.SuppressLint
-import android.app.Activity
-import android.app.Activity.RESULT_OK
-import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
-import android.os.FileUtils
-import android.speech.RecognizerIntent
 import android.text.Layout
-import android.util.Log
 import android.webkit.MimeTypeMap
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -70,7 +62,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,16 +77,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.core.app.ShareCompat.IntentBuilder
 import androidx.core.content.FileProvider
-import androidx.core.net.toFile
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.usfitness.R
 import com.example.usfitness.database.customer.CustomizedCustomer
-import com.example.usfitness.database.record.Record
+import com.example.usfitness.database.payment.Payment
 import com.example.usfitness.ui.theme.getColor
 import com.example.usfitness.viewmodel.MainScreenViewModel
 import com.example.usfitness.viewmodel.Sort
@@ -113,6 +101,7 @@ import com.patrykandpatrick.vico.core.axis.AxisPosition
 import com.patrykandpatrick.vico.core.axis.formatter.AxisValueFormatter
 import com.patrykandpatrick.vico.core.chart.composed.plus
 import com.patrykandpatrick.vico.core.chart.layout.HorizontalLayout
+import com.patrykandpatrick.vico.core.chart.scale.AutoScaleUp
 import com.patrykandpatrick.vico.core.component.shape.LineComponent
 import com.patrykandpatrick.vico.core.component.text.TextComponent
 import com.patrykandpatrick.vico.core.component.text.VerticalPosition
@@ -153,13 +142,19 @@ fun MainScreen(navController: NavController) {
                     verticalArrangement = Arrangement.Center
                 ) {
                     items(it) { customer ->
-                        CustomerListItem(customer)
+                        CustomerListItem(customer, navController)
                     }
                 }
             }
-            
-            if(customers.value?.isEmpty() == true){
-                Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+
+            if (customers.value?.isEmpty() == true) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
                     Text(text = "No Records To Show")
                 }
             }
@@ -173,16 +168,16 @@ fun MainScreen(navController: NavController) {
 
 // Composable
 
-@SuppressLint("RememberReturnType")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CustomerListItem(customer: CustomizedCustomer) {
+fun CustomerListItem(customer: CustomizedCustomer, navController: NavController) {
 
     val context = LocalContext.current
 
     val mainScreenViewModel: MainScreenViewModel = hiltViewModel()
 
-    val customerRecords = mainScreenViewModel.getCustomerPaymentDates(customer.cid).observeAsState()
+    val customerPaymentRecords =
+        mainScreenViewModel.getPaymentsForCustomer(customer.cid).observeAsState()
 
     val (customerCard, setCustomerCard) = remember {
         mutableStateOf(false)
@@ -200,6 +195,7 @@ fun CustomerListItem(customer: CustomizedCustomer) {
             setCustomerCard(true)
         }) {
         Text(
+            fontWeight = FontWeight.SemiBold,
             modifier = Modifier
                 .align(Alignment.CenterVertically)
                 .padding(10.dp),
@@ -220,7 +216,9 @@ fun CustomerListItem(customer: CustomizedCustomer) {
                 .fillMaxHeight()
         ) {
             Text(
-                textAlign = TextAlign.Center, text = customer.firstName + " " + customer.lastName
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                text = customer.firstName + " " + customer.lastName
             )
             CustomerDebt(customer.debt)
         }
@@ -239,6 +237,7 @@ fun CustomerListItem(customer: CustomizedCustomer) {
                     .background(mainScreenViewModel.getExpiryTintForCustomer(customer.endDate))
             )
             Text(
+                fontWeight = FontWeight.SemiBold,
                 fontSize = 10.sp,
                 text = customer.endDate.format(DateTimeFormatter.ofPattern("dd MMM yy"))
             )
@@ -251,17 +250,16 @@ fun CustomerListItem(customer: CustomizedCustomer) {
             .height(2.dp)
     )
 
-    val paidData = (customerRecords.value ?: listOf(
-        Record(0, 0, LocalDate.now(), LocalDate.now(), 0, 0)
-    )).map {
-        it.startDate to it.paid
+    val customerPaymentRecordList = (customerPaymentRecords.value ?: listOf(
+        Payment(0, 0, 0,  LocalDate.now()))
+    )
+
+    val dateTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yy")
+
+    val paidData = customerPaymentRecordList.mapIndexed { index, it ->
+        "${it.date.format(dateTimeFormatter)} $index" to  it.amount
     }.associate { it.first to it.second }
 
-    val unpaidData = (customerRecords.value ?: listOf(
-        Record(0, 0, LocalDate.now(), LocalDate.now(), 0, 0)
-    )).map {
-        it.endDate to it.paid - it.total
-    }.associate { it.first to it.second }
 
     if (customerCard) ModalBottomSheet(sheetState = customerCardSheetState,
         onDismissRequest = { setCustomerCard(false) }) {
@@ -272,7 +270,7 @@ fun CustomerListItem(customer: CustomizedCustomer) {
         ) {
             Column {
 
-                CustomerChart(unpaidData = unpaidData, paidData = paidData)
+                CustomerChart(paidData = paidData)
 
                 Text(
                     modifier = Modifier
@@ -281,33 +279,19 @@ fun CustomerListItem(customer: CustomizedCustomer) {
                     textAlign = TextAlign.Center,
                     text = "History"
                 )
+
                 Spacer(modifier = Modifier.height(10.dp))
-                Button(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    onClick = {
+
+
+                listOf(
+                    Pair("Call ${customer.firstName}") {
                         val uri = Uri.parse("tel:" + customer.mobile)
                         val intent = Intent(Intent.ACTION_DIAL, uri)
                         context.startActivity(intent)
-                    }) {
-                    Text(
-                        modifier = Modifier.padding(horizontal = 0.dp, vertical = 8.dp),
-                        textAlign = TextAlign.Start,
-                        text = "Call ${customer.firstName}",
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-                Spacer(modifier = Modifier.size(4.dp))
-
-                listOf(
-
-                    "Settle Payment",
-                    "Current Package",
-                    "Customer Details"
+                    },
+                    Pair("Settle Payment") { navController.navigate("payment_settlement_screen/${customer.cid}") },
+                    Pair("Extend Package") { navController.navigate("extend_package_screen/${customer.cid}") },
+                    Pair("Customer Details") { navController.navigate("customer_details_screen/${customer.cid}") }
                 ).map {
                     Button(
                         modifier = Modifier.fillMaxWidth(),
@@ -316,11 +300,12 @@ fun CustomerListItem(customer: CustomizedCustomer) {
                             contentColor = MaterialTheme.colorScheme.onSurface
                         ),
                         shape = RoundedCornerShape(10.dp),
-                        onClick = { /*TODO*/ }) {
+                        onClick = it.second
+                    ) {
                         Text(
                             modifier = Modifier.padding(horizontal = 0.dp, vertical = 8.dp),
                             textAlign = TextAlign.Start,
-                            text = "$it",
+                            text = it.first,
                         )
                         Spacer(modifier = Modifier.weight(1f))
                     }
@@ -332,73 +317,43 @@ fun CustomerListItem(customer: CustomizedCustomer) {
 }
 
 @Composable
-fun CustomerChart(unpaidData: Map<LocalDate, Int>, paidData: Map<LocalDate, Int>) {
-    val iterator = remember {
-        mutableFloatStateOf(0f)
-    }
+fun CustomerChart( paidData: Map<String, Int>) {
+    var iterator = 0f
 
-    val paidDataXValuesToDates = paidData.keys.associateBy { iterator.floatValue++ }
+    val paidDataXValuesToDates =
+        paidData.keys.associateBy { iterator ++ }
     val paidDataEntryModel =
         entryModelOf(paidDataXValuesToDates.keys.zip(paidData.values, ::entryOf))
-
-    val unpaidDataXValuesToDates = unpaidData.keys.associateBy { iterator.floatValue++ }
-    val unpaidDataEntryModel =
-        entryModelOf(unpaidDataXValuesToDates.keys.zip(unpaidData.values, ::entryOf))
 
     val barTextComponentBuilder = TextComponent.Builder()
     barTextComponentBuilder.padding = MutableDimensions(10f, 10f)
     barTextComponentBuilder.textAlignment = Layout.Alignment.ALIGN_CENTER
     barTextComponentBuilder.color = MaterialTheme.colorScheme.secondary.toArgb()
+
     val verticalAxisValueFormatter = AxisValueFormatter<AxisPosition.Vertical.Start> { value, _ ->
-        value.toInt().toString()
+        "${value.toInt()} ₹"
     }
 
     val paidDataColumnComponent = listOf(
         LineComponent(
             color = MaterialTheme.colorScheme.primaryContainer.toArgb(),
-            thicknessDp = 3f,
-            shape = RoundedCornerShape(5.dp).chartShape()
-        ),
-    )
-
-    val unpaidDataColumnComponent = listOf(
-        LineComponent(
-            color = MaterialTheme.colorScheme.errorContainer.toArgb(),
-            thicknessDp = 3f,
+            thicknessDp = 25f,
             shape = RoundedCornerShape(5.dp).chartShape()
         ),
     )
 
     val paidChart = columnChart(
-        spacing = 2.dp,
+        spacing = 10.dp,
         columns = paidDataColumnComponent,
         dataLabel = barTextComponentBuilder.build(),
-        dataLabelVerticalPosition = VerticalPosition.Bottom,
+        dataLabelVerticalPosition = VerticalPosition.Top,
         dataLabelRotationDegrees = 270f,
     )
 
-    val unpaidChart = columnChart(
-        spacing = 2.dp,
-        columns = unpaidDataColumnComponent,
-        dataLabel = barTextComponentBuilder.build(),
-        dataLabelVerticalPosition = VerticalPosition.Bottom,
-        dataLabelRotationDegrees = 270f
-    )
-
-    val composedChart = remember(paidChart, unpaidChart) {
-        paidChart + unpaidChart
-    }
-
-    val composedModelEntry = remember(paidDataEntryModel, unpaidDataEntryModel) {
-        paidDataEntryModel + unpaidDataEntryModel
-    }
-
-    val dateTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yy")
     val horizontalAxisValueFormatter =
         AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ ->
-            ((paidDataXValuesToDates + unpaidDataXValuesToDates)[value] ?: LocalDate.ofEpochDay(
-                value.toLong()
-            )).format(dateTimeFormatter)
+            ((paidDataXValuesToDates)[value] ?: ""
+            ).dropLast(2)
         }
 
     val dateTextComponentBuilder = TextComponent.Builder()
@@ -407,9 +362,10 @@ fun CustomerChart(unpaidData: Map<LocalDate, Int>, paidData: Map<LocalDate, Int>
     dateTextComponentBuilder.lineCount = 3
 
     Chart(
+        getXStep = { 1f },
         modifier = Modifier.padding(horizontal = 20.dp),
-        chart = composedChart,
-        model = composedModelEntry,
+        chart = paidChart,
+        model = paidDataEntryModel,
         horizontalLayout = HorizontalLayout.FullWidth(
             scalableStartPaddingDp = 2f,
             scalableEndPaddingDp = 2f,
@@ -425,7 +381,8 @@ fun CustomerChart(unpaidData: Map<LocalDate, Int>, paidData: Map<LocalDate, Int>
                 AxisItemPlacer.Horizontal.default(shiftExtremeTicks = false)
             },
             tickLength = 0.dp
-        )
+        ),
+        autoScaleUp = AutoScaleUp.None
     )
 }
 
@@ -439,6 +396,7 @@ fun CustomerDebt(debt: String) {
             contentDescription = "Down"
         )
         Text(
+            fontWeight = FontWeight.SemiBold,
             fontSize = LocalTextStyle.current.fontSize.times(0.8f),
             color = if (!isPaid) getColor("Red") else getColor("Green"),
             textAlign = TextAlign.Center,
@@ -470,10 +428,7 @@ fun BackupAndRestoreButton() {
                         context, "com.example.usfitness.provider", databaseFile.value!!
                     )
                 )
-                type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(
-                    MimeTypeMap.getFileExtensionFromUrl(databaseFile.value!!.absolutePath)
-                        .lowercase()
-                )
+                type = "application/zip"
             }
 
             val shareIntent = Intent.createChooser(sendIntent, "Save Database")

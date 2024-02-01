@@ -4,6 +4,8 @@ import android.content.Context
 import com.example.usfitness.database.customer.CustomerDAO
 import com.example.usfitness.database.customer.CustomerRepository
 import com.example.usfitness.database.USFitnessDatabase
+import com.example.usfitness.database.payment.PaymentDAO
+import com.example.usfitness.database.payment.PaymentRepository
 import com.example.usfitness.database.record.RecordRepository
 import com.example.usfitness.database.record.RecordsDAO
 import dagger.Module
@@ -39,5 +41,15 @@ object DatabaseModule {
     @Provides
     fun provideRecordRepository(recordsDAO: RecordsDAO) : RecordRepository {
         return RecordRepository(recordsDAO)
+    }
+
+    @Provides
+    fun providePaymentDao(usFitnessDatabase: USFitnessDatabase) : PaymentDAO {
+        return usFitnessDatabase.paymentDao()
+    }
+
+    @Provides
+    fun providePaymentRepository(paymentDAO : PaymentDAO) : PaymentRepository {
+        return PaymentRepository(paymentDAO)
     }
 }

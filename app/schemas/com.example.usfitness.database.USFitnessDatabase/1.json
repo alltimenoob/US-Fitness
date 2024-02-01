@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "4349e2ff7dbb318f413534edb4bd96f7",
+    "identityHash": "2dbc48245db6b855b460334312de8dce",
     "entities": [
       {
         "tableName": "Customer",
@@ -60,7 +60,7 @@
       },
       {
         "tableName": "Record",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`rid` INTEGER PRIMARY KEY AUTOINCREMENT, `cid` INTEGER NOT NULL, `start_date` TEXT NOT NULL, `end_date` TEXT NOT NULL, `total` INTEGER NOT NULL, `paid` INTEGER NOT NULL, FOREIGN KEY(`cid`) REFERENCES `Customer`(`cid`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`rid` INTEGER PRIMARY KEY AUTOINCREMENT, `cid` INTEGER NOT NULL, `start_date` TEXT NOT NULL, `end_date` TEXT NOT NULL, `total` INTEGER NOT NULL, FOREIGN KEY(`cid`) REFERENCES `Customer`(`cid`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "rid",
@@ -89,12 +89,6 @@
           {
             "fieldPath": "total",
             "columnName": "total",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "paid",
-            "columnName": "paid",
             "affinity": "INTEGER",
             "notNull": true
           }
@@ -129,12 +123,72 @@
             ]
           }
         ]
+      },
+      {
+        "tableName": "Payment",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`pid` INTEGER PRIMARY KEY AUTOINCREMENT, `rid` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `date` TEXT NOT NULL, FOREIGN KEY(`rid`) REFERENCES `Record`(`rid`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "pid",
+            "columnName": "pid",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "rid",
+            "columnName": "rid",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "pid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_Payment_rid",
+            "unique": true,
+            "columnNames": [
+              "rid"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_Payment_rid` ON `${TABLE_NAME}` (`rid`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "Record",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "rid"
+            ],
+            "referencedColumns": [
+              "rid"
+            ]
+          }
+        ]
       }
     ],
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4349e2ff7dbb318f413534edb4bd96f7')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2dbc48245db6b855b460334312de8dce')"
     ]
   }
 }
